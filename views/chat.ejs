@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title><%= title %></title>
+    <link rel='stylesheet' href='/stylesheets/style.css'/>
+    <link rel='stylesheet' href='/css/bootstrap.min.css'/>
+
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+    <script src="js/lib/underscore-min.js"></script>
+    <script src="js/lib/knockout-3.0.0.js"></script>
+    <script src="js/helpers.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+
+</head>
+<body>
+
+<div class="row">
+    <div class="col-lg-5">
+        <h3>Chat</h3>
+        <div id="messages">
+            <ul data-bind="foreach: messages">
+                <li><span data-bind="text: nickname"></span> : <span data-bind="html: message"></span></li>
+            </ul>
+        </div>
+        <div data-bind="visible: isUser">
+            <input type="text" data-bind="value: message, enter: sendMessage, hasFocus:editing">
+            <input type="checkbox" data-bind="checked: isDedicated"/>
+            <button data-bind="click: sendMessage">send</button>
+        </div>
+
+        <div data-bind="visible: isUser() == false">
+            <input type="text" data-bind="value: nickname">
+            <button data-bind="click: register">register</button>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <h3>Αφιερώσεις</h3>
+        <div id="dedications">
+            <ul data-bind="foreach: dedications">
+                <li>
+                    <span data-bind="text: $data.nickname"></span> : <span data-bind="text: $data.message"></span>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+
+</div>
+
+
+<script>
+    function ChatViewModel(data) {
+        var self = this;
+        var socket = io.connect('http://localhost');
+        self.nickname = ko.observable("");
+        self.dedications = ko.observableArray([])
+        self.messages = ko.observableArray([]);
+        self.message = ko.observable("");
+        self.isDedicated = ko.observable(false);
+        self.editing = ko.observable(false);
+        self.isUser = ko.observable(false);
+
+
+        $.getJSON('/show/latest/messages', function (messages) {
+            self.messages(messages.reverse());
+        });
+
+        $.getJSON('/show/latest/dedications', function (dedications) {
+            var list = _.chain(dedications).filter(function (d) {
+                return d.isAccepted == true;
+            }).reverse().value();
+            self.dedications(list);
+        });
+
+        $.post('/is/user').done(function (data) {
+            if (data) {
+                self.isUser(data.is);
+            }
+        })
+
+        self.sendMessage = function () {
+            var posting = $.post('/send/message', {message: self.message(), isDedicated: self.isDedicated()}).done();
+            self.message("");
+            self.isDedicated(false);
+            self.editing(true);
+        }
+
+        self.register = function () {
+            $.post('/add/user', { nickname: self.nickname() }).done(function (data) {
+                self.isUser(true);
+                console.log('ip ' + data.ip);
+                socket.emit('registerID',{ip:data.ip});
+            });
+
+        }
+
+
+        socket.on('message', function (data) {
+            var replacement = { ":)": "<h2>hahha</h2>" };
+            var string = data.message;
+            string = escape(string);
+            for (var val in replacement)
+                string = string.replace(new RegExp(escape(val), "g"), replacement[val]);
+            data.message = unescape(string);
+            self.messages.push(data);
+
+        });
+
+
+
+        socket.on('acceptedDedication', function (data) {
+            self.dedications.push(data);
+        });
+
+        socket.on('removeMessage', function (data) {
+            var msg = _.find(self.messages(), function (message) {
+                return  message._id === data.id;
+            });
+
+            self.messages.remove(msg);
+        });
+
+        socket.on('removeDedication', function (data) {
+            var ded = _.find(self.dedications(), function (dedication) {
+                return  dedication._id === data.id;
+            });
+
+            self.dedications.remove(ded);
+        });
+
+        socket.on('allMessagesRemoved', function (data) {
+            self.messages([]);
+        });
+        socket.on('allDedicationsRemoved', function (data) {
+            self.dedications([]);
+        });
+        socket.on('allUsersRemoved', function (data) {
+            self.isUser(false);
+        });
+
+        socket.on('registerAgain',function(data){
+           self.isUser(false);
+        });
+
+    }
+
+    var vm = new ChatViewModel();
+    ko.applyBindings(vm);
+
+</script>
+</body>
+</html>

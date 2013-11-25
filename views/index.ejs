@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title><%= title %></title>
+    <link rel='stylesheet' href='/stylesheets/style.css'/>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+    <script src="js/lib/underscore-min.js"></script>
+    <script src="js/helpers.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+
+</head>
+<body>
+
+<div id="messages">
+    <ul>
+
+    </ul>
+</div>
+
+<div id="dedications">
+    <ul>
+
+    </ul>
+</div>
+
+<form name="input" action="/" id="register" method="post">
+    Add nickname: <input type="text" name="nickname">
+    <input type="submit" value="Submit">
+</form>
+
+<form name="input" action="/" id="sendMessage" method="post">
+    Message: <input type="text" name="message">
+    Is dedicated <input type="checkbox" name="dedication">
+    <input type="submit" value="Submit">
+</form>
+
+<script>
+    var $sendMessage = $('#sendMessage');
+    var $register = $('#register');
+
+    var posting = $.post('/isUser');
+
+    posting.done(function (data) {
+        console.log(data);
+        if (data.is) {
+            $sendMessage.show();
+            $register.hide();
+            console.log(data.nickname);
+        } else {
+            $sendMessage.hide();
+
+            $register.show();
+        }
+    });
+
+
+    $.getJSON('/getLatestMessages', function (messages) {
+        $(function () {
+            var messageBoard = $('#messages ul');
+            _.chain(messages).reverse().map(function (msg) {
+
+                        messageBoard.append('<li><span style="color:red" ' + 'id="' +
+                                msg._id + '">' + msg.nickname + ': </span>'
+                                + msg.message + '</li>');
+                    }
+            );
+        });
+    });
+
+    $.getJSON('/getLatestDedications', function (messages) {
+        $(function () {
+            var messageBoard = $('#dedications ul');
+            _.chain(messages).reverse().map(function (msg) {
+                        if (msg.accepted) {
+                            messageBoard.append('<li><span style="color:red" ' + 'id="' +
+                                    msg._id + '"> from ' + msg.nickname + ': </span>'
+                                    + msg.message + '</li>');
+                        }
+                    }
+            );
+        });
+    });
+
+
+    $('#register').submit(function (event) {
+        event.preventDefault();
+
+        var $form = $(this),
+                inputName = $form.find('input[name=nickname]'),
+                nickname = inputName.val();
+
+        inputName.val('');
+        var posting = $.post('/addUser', {nickname: nickname});
+        posting.done(function (data) {
+            if (data.saved) {
+                $form.hide();
+                $sendMessage.show();
+            }
+        });
+    });
+
+    $('#sendMessage').submit(function (event) {
+        event.preventDefault();
+
+        var $form = $(this);
+        var inputMsg = $form.find('input[name=message]');
+        var inputCheck = $form.find('input[name=dedication]');
+        var message = inputMsg.val();
+        var check = inputCheck.is(':checked');
+        var posting = $.post('/sendMessage', {message: message, isDedicated: check});
+
+        inputMsg.val('');
+        inputCheck.attr('checked', false);
+        posting.done(function (data) {
+            console.log(data);
+        });
+    });
+</script>
+
+<script>
+    var socket = io.connect('http://localhost');
+    socket.on('message', function (data) {
+        $(function () {
+            $('#messages ul').append('<li><span style="color:red" ' + 'id="' + data._id + '">' + data.nickname + ': </span>' + data.message + '</li>');
+        });
+    });
+
+    socket.on('acceptedDedication', function (data) {
+            $(function () {
+
+                $('#dedications ul').append('<li><span style="color:red" ' + 'id="' + data._id + '"> from ' + data.nickname + ': </span>' + data.message + '</li>');
+            });
+
+    });
+</script>
+
+</body>
+</html>

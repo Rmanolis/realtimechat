@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title><%= title %></title>
+    <link rel='stylesheet' href='/stylesheets/style.css'/>
+    <link rel='stylesheet' href='/css/bootstrap.min.css'/>
+
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+    <script src="js/lib/underscore-min.js"></script>
+    <script src="js/lib/knockout-3.0.0.js"></script>
+    <script src="js/helpers.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+
+</head>
+<body>
+<div class="row">
+
+    <div class="col-md-4">
+        <button data-bind="click: removeAllMessages">Remove all messages</button>
+        <div id="messages">
+            <ul data-bind="foreach: messages">
+                <li><span data-bind="text: nickname "></span> : <span data-bind="text: message"></span>
+                    <button data-bind="click: $parent.removeMessage">Remove</button>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+
+        <button data-bind="click: removeAllDedications">Remove all dedications</button>
+        <div id="dedications">
+            <ul data-bind="foreach: dedications">
+                <li><span data-bind="text: nickname"></span> : <span data-bind="text: message"></span>
+                    <button data-bind="click: $parent.removeDedication">Remove</button>
+                    <div data-bind="ifnot: isAccepted">
+                        <button data-bind="click: $parent.acceptDedication">Accept</button>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <div class="col-md-4">
+
+        <button data-bind="click: removeAllUsers">Remove all users</button>
+        <div id="users">
+            <ul data-bind="foreach: users">
+                <li><span data-bind="text: nickname"></span> : <span data-bind="text: ip"> </span> : <span
+                            data-bind="text: isBlocked"> </span>
+                    <button data-bind="click: $parent.removeUser">Remove</button>
+                    <div data-bind="ifnot: isBlocked">
+                        <button data-bind="click: $parent.blockUser">Block</button>
+                    </div>
+                    <div data-bind="if:isBlocked">
+                        <button data-bind="click: $parent.unblockUser">Unblock</button>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+<script>
+
+
+    function AdminViewModel(data) {
+        var self = this;
+        var socket = io.connect('http://localhost');
+        self.dedications = ko.observableArray([])
+        self.messages = ko.observableArray([]);
+        self.users = ko.observableArray([]);
+
+        $.getJSON('/show/all/messages', function (messages) {
+            self.messages(messages.reverse());
+        });
+
+        $.getJSON('/show/all/dedications', function (dedications) {
+            self.dedications(dedications.reverse());
+        });
+
+        $.getJSON('/show/all/users', function (users) {
+            self.users(users.reverse());
+        });
+
+
+        /*functions */
+        self.removeAllMessages = function () {
+            $.getJSON('/remove/all/messages');
+        };
+
+        self.removeAllDedications = function () {
+            $.getJSON('/remove/all/dedications');
+        };
+        self.removeAllUsers = function () {
+            $.getJSON('/remove/all/users');
+        };
+
+        self.removeMessage = function (message) {
+
+            $.post('/remove/message', {id: message._id}).done(function () {
+                self.messages.remove(message);
+            });
+
+        };
+
+        self.removeDedication = function (dedication) {
+
+            $.post('/remove/dedication', {id: dedication._id}).done(function () {
+                self.dedications.remove(dedication);
+            });
+
+        };
+
+        self.removeUser = function (user) {
+            $.post('/remove/user', {ip: user.ip}).done(function () {
+                self.users.remove(user);
+            });
+        };
+
+        self.blockUser = function (user) {
+            $.post('/block/user', {ip: user.ip}).done(function () {
+                var newUser = user;
+                newUser.isBlocked = true;
+                self.users.replace(user, newUser);
+                self.users.refresh();
+            });
+        }
+
+        self.unblockUser = function (user) {
+            $.post('/unblock/user', {ip: user.ip}).done(function () {
+                var newUser = user;
+                newUser.isBlocked = false;
+                self.users.replace(user, newUser);
+                self.users.refresh();
+
+            });
+        }
+
+        self.acceptDedication = function (dedication) {
+            $.post('/accept/dedication', {id: dedication._id}).done(function () {
+                var newDedication = dedication;
+                newDedication.isAccepted = true;
+                self.dedications.replace(dedication, newDedication);
+                self.dedications.refresh();
+            })
+        }
+
+        /*end functions*/
+
+        socket.on('message', function (data) {
+            self.messages.push(data);
+        });
+        socket.on('dedication', function (data) {
+            self.dedications.push(data);
+        });
+        socket.on('user', function (data) {
+            $.getJSON('/show/all/users', function (users) {
+                self.users(users);
+            });
+        });
+        socket.on('allMessagesRemoved', function (data) {
+            self.messages([]);
+        });
+        socket.on('allDedicationsRemoved', function (data) {
+            self.dedications([]);
+        });
+        socket.on('allUsersRemoved', function (data) {
+            self.users([]);
+        });
+
+    }
+    var vm = new AdminViewModel();
+    ko.applyBindings(vm);
+</script>
+
+</body>
+</html>
